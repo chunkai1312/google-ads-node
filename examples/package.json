@@ -1,0 +1,15 @@
+{
+  "name": "google-ads-node-examples",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "dateformat": "^3.0.3",
+    "google-ads-node": "^1.9.0",
+    "google-auth-library": "^3.1.2",
+    "inquirer": "^6.2.2",
+    "moment": "^2.24.0",
+    "opn": "^6.0.0",
+    "server-destroy": "^1.0.1",
+    "yargs": "^13.2.2"
+  }
+}

@@ -1,82 +1,92 @@
+'use strict'
+
 const {
   GoogleAdsClient,
   SearchGoogleAdsRequest,
   KeywordMatchTypeEnum,
 } = require("google-ads-node");
 
-/* Make sure to set your own authentication details here */
-const CLIENT_ID = "<CLIENT_ID>";
-const CLIENT_SECRET = "<CLIENT_SECRET>";
-const REFRESH_TOKEN = "<REFRESH_TOKEN>";
-const DEVELOPER_TOKEN = "<DEVELOPER_TOKEN>";
-const LOGIN_CUSTOMER_ID = "<LOGIN_CUSTOMER_ID>";
-const CUSTOMER_ID = "<CUSTOMER_ID>";
+const { parseCommandArguments } = require('../utils/argument_parser')
+const { CUSTOMER_ID } = require('../utils/argument_names')
 
-/* Create a new GoogleAdsClient instance */
-const client = new GoogleAdsClient({
-  client_id: CLIENT_ID,
-  client_secret: CLIENT_SECRET,
-  refresh_token: REFRESH_TOKEN,
-  developer_token: DEVELOPER_TOKEN,
-  login_customer_id: LOGIN_CUSTOMER_ID,
+async function main () {
+  const options = parseCommandArguments([CUSTOMER_ID])
 
-  /* This option unmarshals the gRPC response blobs to plain Javscript objects automatically */
-  parseResults: true,
-});
+  const customerId = options.customerId || 'INSERT_CUSTOMER_ID_HERE'
 
-async function main() {
-  /* 
-    In most cases, the "GoogleAdsService" is all you need to for accessing reporting data, 
-    including metrics and segments 
-  */
-  const service = client.getService("GoogleAdsService");
+  const googleAdsClient = new GoogleAdsClient()
 
-  /* Create a new service request */
-  const request = new SearchGoogleAdsRequest();
+  await runExample(googleAdsClient, customerId)
+}
 
-  /* SearchGoogleAdsRequest requires a valid customer id and a GAQL query string */
-  request.setCustomerId(CUSTOMER_ID);
+/**
+ * Runs the example.
+ *
+ * @param {GoogleAdsClient} googleAdsClient - The Google Ads API client.
+ * @param {string} customerId - The client customer ID without hyphens.
+ */
+async function runExample (googleAdsClient, customerId) {
+  const service = googleAdsClient.getService('GoogleAdsService')
+
+  const request = new SearchGoogleAdsRequest()
+  request.setCustomerId(customerId)
   request.setQuery(`
     SELECT 
-        campaign.id, 
-        campaign.name, 
-        ad_group.id, 
-        ad_group.name,
-        ad_group_criterion.criterion_id,
-        ad_group_criterion.keyword.text,
-        ad_group_criterion.keyword.match_type,
-        metrics.impressions, 
-        metrics.clicks, 
-        metrics.cost_micros
+      campaign.id, 
+      campaign.name, 
+      ad_group.id, 
+      ad_group.name,
+      ad_group_criterion.criterion_id,
+      ad_group_criterion.keyword.text,
+      ad_group_criterion.keyword.match_type,
+      metrics.impressions, 
+      metrics.clicks, 
+      metrics.cost_micros
     FROM 
-        keyword_view 
+      keyword_view 
     WHERE 
-        segments.date DURING LAST_7_DAYS
-        AND campaign.advertising_channel_type = "SEARCH"
-        AND ad_group.status = "ENABLED"
-        AND ad_group_criterion.status IN ("ENABLED", "PAUSED")
+      segments.date DURING LAST_7_DAYS
+      AND campaign.advertising_channel_type = "SEARCH"
+      AND ad_group.status = "ENABLED"
+      AND ad_group_criterion.status IN ("ENABLED", "PAUSED")
     ORDER BY 
-        metrics.impressions DESC
+      metrics.impressions DESC
     LIMIT 50
-  `);
+  `)
+  request.setPageSize(1000)
 
-  /* Call the Search method of the GoogleAdsService (Note: Methods are camel case in this library) */
-  const response = await service.search(request);
+  const response = await service.search(request)
 
-  /* Iterate over the response rows */
-  for (const row of response.resultsList) {
-    const { adGroupCriterion, metrics } = row;
+  for (const row of response.getResultsList()) {
+    const campaign = row.getCampaign()
+    const adGroup = row.getAdGroup()
+    const adGroupCriterion = row.getAdGroupCriterion()
+    const metrics = row.getMetrics()
 
-    /* Use the KeywordMatchType to filter keywords with Phrase match */
-    if (adGroupCriterion.keyword.matchType === KeywordMatchTypeEnum.KeywordMatchType.PHRASE) {
-      const { text } = adGroupCriterion.keyword;
-      const { impressions } = metrics;
-
-      console.log(
-        `Keyword text "${text}" had ${impressions} impression(s) during the last 7 days.`
-      );
-    }
+    console.log(
+      `Keyword text '%s' with `
+      + `match type %d `
+      + `and ID %d `
+      + `in ad group '%s' `
+      + `with ID %d `
+      + `in campaign '%s' `
+      + `with ID %d `
+      + `had %d impression(s), `
+      + `%d click(s), `
+      + `and %d cost (in micros) `
+      + `during the last 7 days.`,
+      adGroupCriterion.getKeyword().getText().getValue(),
+      adGroupCriterion.getKeyword().getMatchType(),
+      adGroupCriterion.getCriterionId().getValue(),
+      adGroup.getName().getValue(),
+      adGroup.getId().getValue(),
+      campaign.getName().getValue(),
+      campaign.getId().getValue(),
+      metrics.getImpressions().getValue(),
+      metrics.getClicks().getValue(),
+      metrics.getCostMicros().getValue()
+    )
   }
 }
 
-main();
+main().catch(console.error)
